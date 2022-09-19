@@ -8,9 +8,9 @@ import osqp
 
 # Colors
 DRIVABLE_AREA = '#BDC3C7'
-WAYPOINTS = '#D0D3D4'
+WAYPOINTS = '#002FA7'
 PATH_CONSTRAINTS = '#F5B041'
-OBSTACLE = '#2E4053'
+OBSTACLE = '#1B2F3B'
 
 
 ############
@@ -276,6 +276,7 @@ class ReferencePath:
             for cell in path:
                 t_x, t_y = cell[0], cell[1]
                 # If path goes through occupied cell
+                
                 if self.map.data[t_y, t_x] == 0:
                     # Get world coordinates
                     c_x, c_y = self.map.m2w(t_x, t_y)
@@ -283,7 +284,7 @@ class ReferencePath:
                     if cell_dist < min_width:
                         min_width = cell_dist
                         min_cell = (c_x, c_y)
-
+                
         return min_width, min_cell
 
     def compute_speed_profile(self, Constraints):
@@ -366,7 +367,8 @@ class ReferencePath:
         # Terminate execution if end of path reached
         elif wp_id >= self.n_waypoints and not self.circular:
             print('Reached end of path!')
-            exit(1)
+            return self.waypoints[-1]
+            #exit(1)
 
         return self.waypoints[wp_id]
 
@@ -378,21 +380,21 @@ class ReferencePath:
         """
 
         # Clear figure
-        plt.clf()
+        #plt.clf()
 
         # Disabled ticks
-        plt.xticks([])
-        plt.yticks([])
+        #plt.xticks([])
+        #plt.yticks([])
 
         # Plot map in gray-scale and set extent to match world coordinates
         canvas = np.ones(self.map.data.shape)
         # canvas = np.flipud(self.map.data)
-        plt.imshow(canvas, cmap='gray',
-                   extent=[self.map.origin[0], self.map.origin[0] +
-                           self.map.width * self.map.resolution,
-                           self.map.origin[1], self.map.origin[1] +
-                           self.map.height * self.map.resolution], vmin=0.0,
-                   vmax=1.0)
+        #plt.imshow(canvas, cmap='gray',
+        #           extent=[self.map.origin[0], self.map.origin[0] +
+        #                   self.map.width * self.map.resolution,
+        #                   self.map.origin[1], self.map.origin[1] +
+        #                   self.map.height * self.map.resolution], vmin=0.0,
+        #           vmax=1.0)
 
         # Get x and y coordinates for all waypoints
         wp_x = np.array([wp.x for wp in self.waypoints])
@@ -403,12 +405,13 @@ class ReferencePath:
         wp_ub_y = np.array([wp.static_border_cells[0][1] for wp in self.waypoints])
         wp_lb_x = np.array([wp.static_border_cells[1][0] for wp in self.waypoints])
         wp_lb_y = np.array([wp.static_border_cells[1][1] for wp in self.waypoints])
-
+        '''
         # Plot waypoints
         # colors = [wp.v_ref for wp in self.waypoints]
         plt.scatter(wp_x, wp_y, c=WAYPOINTS, s=10)
-
+        '''
         # Plot arrows indicating drivable area
+        '''
         if display_drivable_area:
             plt.quiver(wp_x, wp_y, wp_ub_x - wp_x, wp_ub_y - wp_y, scale=1,
                    units='xy', width=0.2*self.resolution, color=DRIVABLE_AREA,
@@ -416,8 +419,9 @@ class ReferencePath:
             plt.quiver(wp_x, wp_y, wp_lb_x - wp_x, wp_lb_y - wp_y, scale=1,
                    units='xy', width=0.2*self.resolution, color=DRIVABLE_AREA,
                    headwidth=1, headlength=0)
-
+        '''
         # Plot border of path
+
         bl_x = np.array([wp.static_border_cells[0][0] for wp in
                          self.waypoints] +
                         [self.waypoints[0].static_border_cells[0][0]])
@@ -432,6 +436,7 @@ class ReferencePath:
                         [self.waypoints[0].static_border_cells[1][1]])
 
         # If circular path, connect start and end point
+        '''
         if self.circular:
             plt.plot(bl_x, bl_y, color='#5E5E5E')
             plt.plot(br_x, br_y, color='#5E5E5E')
@@ -441,7 +446,7 @@ class ReferencePath:
             plt.plot(br_x[:-1], br_y[:-1], color=OBSTACLE)
             plt.plot((bl_x[-2], br_x[-2]), (bl_y[-2], br_y[-2]), color=OBSTACLE)
             plt.plot((bl_x[0], br_x[0]), (bl_y[0], br_y[0]), color=OBSTACLE)
-
+        '''
         # Plot dynamic path constraints
         # Get x and y locations of border cells for upper and lower bound
         wp_ub_x = np.array(
@@ -456,12 +461,16 @@ class ReferencePath:
         wp_lb_y = np.array(
             [wp.dynamic_border_cells[1][1] for wp in self.waypoints]+
                         [self.waypoints[0].static_border_cells[1][1]])
+        '''
         plt.plot(wp_ub_x, wp_ub_y, c=PATH_CONSTRAINTS)
         plt.plot(wp_lb_x, wp_lb_y, c=PATH_CONSTRAINTS)
-
+        '''
+        
+        '''
         # Plot obstacles
         for obstacle in self.map.obstacles:
              obstacle.show()
+        '''
 
     def _compute_free_segments(self, wp, min_width):
         """
@@ -533,7 +542,7 @@ class ReferencePath:
 
         # Iterate over horizon
         for n in range(N):
-
+            
             # get corresponding waypoint
             wp = self.get_waypoint(wp_id+n)
 
@@ -639,6 +648,9 @@ class ReferencePath:
             # Append results
             ub_hor.append(ub)
             lb_hor.append(lb)
+            
+            #ub_hor.append(0)
+            #lb_hor.append(0)
             border_cells_hor.append(list(bound_cells))
             border_cells_hor_sm.append(list(bound_cells_sm))
 

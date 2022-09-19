@@ -136,6 +136,30 @@ class Map:
             self.data[cy_px-radius_px:cy_px+radius_px, cx_px-radius_px:
                                                 cx_px+radius_px][index] = 0
 
+    def clear_obstacles(self, obstacles):
+        """
+        Add obstacles to the map.
+        :param obstacles: list of obstacle objects
+        """
+
+        # Extend list of obstacles
+        self.obstacles.extend(obstacles)
+
+        # Iterate over list of new obstacles
+        for obstacle in obstacles:
+
+            # Compute radius of circular object in pixels
+            radius_px = int(np.ceil(obstacle.radius / self.resolution))
+            # Get center coordinates of obstacle in map coordinates
+            cx_px, cy_px = self.w2m(obstacle.cx, obstacle.cy)
+
+            # Add circular object to map
+            y, x = np.ogrid[-radius_px: radius_px, -radius_px: radius_px]
+            index = x ** 2 + y ** 2 <= radius_px ** 2
+            self.data[cy_px-radius_px:cy_px+radius_px, cx_px-radius_px:
+                                                cx_px+radius_px][index] = 1
+        self.obstacles = list()
+
     def add_boundary(self, boundaries):
         """
         Add boundaries to the map.
