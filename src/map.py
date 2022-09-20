@@ -141,10 +141,6 @@ class Map:
         Add obstacles to the map.
         :param obstacles: list of obstacle objects
         """
-
-        # Extend list of obstacles
-        self.obstacles.extend(obstacles)
-
         # Iterate over list of new obstacles
         for obstacle in obstacles:
 

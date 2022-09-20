@@ -10,359 +10,167 @@ import codecs
 import sys
 import os
 import math
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) +"/CubicSpline/")
-try:
-    import cubic_spline_planner
-except:
-    raise
 
-
-def calc_yaw(x, y):
-    if(len(x)!=len(y)):
-        print('error in function: calc_yaw')
-        return
+def calc_v(distance):
+    obstacle_distance_range = 10 #meter
+    if(distance<=obstacle_distance_range):
+        return (obstacle_distance_range - 0.7*distance)
     else:
-        yaw = []
-        for i in range(len(x)-1):
-            dx = x[i+1] - x[i]
-            dy = y[i+1] - y[i]
-            yaw.append(math.atan2(dy, dx))
-        yaw.append(yaw[-1])
-        return yaw
-        
-        
-def get_switch_back_course(path, dl):
-    ax = path[:,0]
-    ay = path[:,1]
-    cx, cy, cyaw, ck, s = cubic_spline_planner.calc_spline_course(
-        ax, ay, ds=dl)
-    return cx, cy, cyaw, ck
-        
-if __name__ == '__main__':
+        return 0
+
+if __name__ == '__main__':    
+    # 加载地图文件
+    map_data = Map(file_path='maps/sim_map.png', origin=[-50, -50], resolution=0.1)
     
-    # Load Dataset
-    with open('trajactory1.json', 'r') as f1:
-        traj1 = json.load(f1)
-    with open('trajactory2.json', 'r') as f2:
-        traj2 = json.load(f2)
+    wp_x1 = [0, 10, 20, 30, 40, 50]
+    wp_y1 = [0, 15, 15, 25, 45, 50]
+
+    wp_x2 = [50, 40, 30, 20, 10, 0]
+    wp_y2 = [0, 5, 25, 35, 35, 50]
+
+    wp_x3 = [-10, 0, 10, 20, 30, 40, 50, 60]
+    wp_y3 = [-15, 0, 15, 15, 25, 35, 40, 65]
+
+    wp_x4 = [60, 50, 40, 30, 20, 10, 0, -10]
+    wp_y4 = [-5, 0, 5, 25, 35, 35, 55, 55]
+
+    x_data = [wp_x1, wp_x2, wp_x4]
+    y_data = [wp_y1, wp_y2, wp_y4]
+    num_paths = len(x_data)
     
-    # Load Dataset
-    path1x = traj1['state/past/x']
-    path1y = traj1['state/past/y']
-    path1k = (path1y[-1] - path1y[-2])/(path1x[-1] - path1x[-2])
-    
-    # Extend trajectory for testing.
-    # You can delete this block when necessary
-    for i in range(150):
-        path1x.append(path1x[-1]+0.3)
-        path1y.append(path1y[-1]+0.3*path1k)
-    
-    # Wrap x and y lists into path array(size: [n,2])
-    path1 = np.zeros([len(path1x),2])
-    for i in range(len(path1x)):
-        path1[i][0] = path1x[i]
-        path1[i][1] = path1y[i]
-    
-    # Load Dataset
-    path2x = traj2['state/past/x']
-    path2y = traj2['state/past/y']
-    path2k = (path2y[-2] - path2y[-3])/(path2x[-2] - path2x[-3])
-    
-    # Extend trajectory for testing.
-    # You can delete this block when necessary
-    for i in range(150):
-        path2x.append(path2x[-1]+0.3)
-        path2y.append(path2y[-1]+0.3*path2k)
-        
-    # Wrap x and y lists into path array(size: [n,2])
-    path2 = np.zeros([len(path2x),2])
-    for i in range(len(path2x)):
-        path2[i][0] = path2x[i]
-        path2[i][1] = path2y[i]
-    
-    # Interpolate a new path by using cubic spline.
-    # dl means the distance(meter) between each waypoint
-    dl1=0.2
-    dl2=0.3
-    
-    # FInally we can get x, y positions of the new interpolated path
-    # cyaw means yaw angle list
-    # ck means curvature list
-    cx1, cy1, cyaw1, ck1 = get_switch_back_course(path1, dl1)
-    cx2, cy2, cyaw2, ck2 = get_switch_back_course(path2, dl2)
-    
+    # 每一时刻的障碍物坐标记录
+    obs_cache = []
 
+    # 遍历所有轨迹
+    for i in range(num_paths):
+        wp_x = x_data[i]
+        wp_y = y_data[i]
+        # 将输入的路径点按照分辨率进行插值，随后平滑处理
+        reference_path = ReferencePath(map_data, wp_x, wp_y, resolution=0.1,
+                                    smoothing_distance=5, max_width=30.0,
+                                    circular=False)
 
+        # 根据路径、地图数据，构建汽车模型
+        car = BicycleModel(length=3, width=2,
+                        reference_path=reference_path, Ts=0.1)
 
-    # Load map file
-    map1 = Map(file_path='maps/sim_map.png', origin=[-50, -50],
-              resolution=0.3)
-    map2 = Map(file_path='maps/sim_map.png', origin=[-50, -50],
-              resolution=0.3)
-        
-    # Specify waypoints
-    wp_x1 = cx1
-    wp_x2 = cx2
-    wp_y1 = cy1
-    wp_y2 = cy2
+        # 创建MPC求解器
+        N = 30
+        Q = sparse.diags([1.0, 0.0, 0.0])
+        R = sparse.diags([0.5, 0.0])
+        QN = sparse.diags([1.0, 0.0, 0.0])
 
-    # Specify path resolution
-    path_resolution1 = 0.2  # m / wp
-    path_resolution2 = 0.3  # m / wp
+        v_max = 18.0  # m/s
+        delta_max = 0.66  # rad
+        ay_max = 15.0  # m/s^2
+        InputConstraints = {'umin': np.array([0.0, -np.tan(delta_max)/car.length]),
+                            'umax': np.array([v_max, np.tan(delta_max)/car.length])}
+        StateConstraints = {'xmin': np.array([-np.inf, -np.inf, -np.inf]),
+                            'xmax': np.array([np.inf, np.inf, np.inf])}
+        mpc = MPC(car, N, Q, R, QN, StateConstraints, InputConstraints, ay_max)
 
-    # Create smoothed reference path
-    reference_path1 = ReferencePath(map1, wp_x1, wp_y1, path_resolution1,
-                                   smoothing_distance=5, max_width=30.0,
-                                   circular=False)
-    reference_path2 = ReferencePath(map2, wp_x2, wp_y2, path_resolution2,
-                                   smoothing_distance=5, max_width=30.0,
-                                   circular=False)
+        # 根据约束信息，计算路径速度
+        a_min = -0.1  # m/s^2
+        a_max = 0.5  # m/s^2
+        SpeedProfileConstraints = {'a_min': a_min, 'a_max': a_max,
+                                'v_min': 0.0, 'v_max': v_max, 'ay_max': ay_max}
+        car.reference_path.compute_speed_profile(SpeedProfileConstraints)
 
-    # Instantiate motion model
-    car1 = BicycleModel(length=3, width=2,
-                       reference_path=reference_path1, Ts=0.05)
-    car2 = BicycleModel(length=3, width=2,
-                       reference_path=reference_path2, Ts=0.05)
+        # 仿真运行记时
+        t = 0.0
+        index = 0
 
+        # 仿真运行轨迹记录
+        x_cache = []
+        y_cache = []
+        xy_cache = []
 
+        while (car.s < reference_path.length):
+            goal_x = reference_path.waypoints[-1].x
+            goal_y = reference_path.waypoints[-1].y
+            goal_distance = math.sqrt((goal_x-car.temporal_state.x)**2+(goal_y-car.temporal_state.y)**2)
+            if(goal_distance<=5):
+                print('goal tolerance achieved!')
+                break
 
+            plt.clf()
+            # 记录汽车当前坐标
+            x_cache.append(car.temporal_state.x)
+            y_cache.append(car.temporal_state.y)
 
-    ##############
-    # Controller #
-    ##############
+            # 计算障碍物距离以及方向单位向量
+            distances = []
+            orientations = []
+            # 在地图上添加障碍物
+            obs_to_map = []
+            for obs_list in obs_cache:
+                obs_x_list = obs_list[0]
+                obs_y_list = obs_list[1]
+                if(index<len(obs_x_list)):
+                    obs_x = obs_x_list[index]
+                    obs_y = obs_y_list[index]
+                else:
+                    obs_x = obs_x_list[-1]
+                    obs_y = obs_y_list[-1]
+                plt.scatter(obs_x, obs_y, s=100)
+                #obs_to_map.append(Obstacle(cx=obs_x, cy=obs_y, radius=1))
+                distance = math.sqrt((car.temporal_state.x -obs_x)**2+(car.temporal_state.y -obs_y)**2)
+                distances.append(distance)
+                orientations.append([(obs_x - car.temporal_state.x)/distance, (obs_y - car.temporal_state.y)/distance])
 
-    N1 = 30
-    N2 = 30
-    Q1 = sparse.diags([1.0, 0.0, 0.0])
-    Q2 = sparse.diags([1.0, 0.0, 0.0])
-    R1 = sparse.diags([0.5, 0.0])
-    R2 = sparse.diags([0.5, 0.0])
-    QN1 = sparse.diags([1.0, 0.0, 0.0])
-    QN2 = sparse.diags([1.0, 0.0, 0.0])
+            # 更新地图
+            #map_data.add_obstacles(obs_to_map)
+            #car.reference_path.map = map_data
 
-    v_max1 = 18.0  # m/s
-    v_max2 = 56.0  # m/s
-    delta_max1 = 0.66  # rad
-    delta_max2 = 0.66  # rad
-    ay_max1 = 15.0  # m/s^2
-    ay_max2 = 15.0  # m/s^2
-    InputConstraints1 = {'umin': np.array([0.0, -np.tan(delta_max1)/car1.length]),
-                        'umax': np.array([v_max1, np.tan(delta_max1)/car1.length])}
-    InputConstraints2 = {'umin': np.array([0.0, -np.tan(delta_max2)/car2.length]),
-                        'umax': np.array([v_max2, np.tan(delta_max2)/car2.length])}
-    StateConstraints1 = {'xmin': np.array([-np.inf, -np.inf, -np.inf]),
-                        'xmax': np.array([np.inf, np.inf, np.inf])}
-    StateConstraints2 = {'xmin': np.array([-np.inf, -np.inf, -np.inf]),
-                        'xmax': np.array([np.inf, np.inf, np.inf])}
-    mpc1 = MPC(car1, N1, Q1, R1, QN1, StateConstraints1, InputConstraints1, ay_max1)
-    mpc2 = MPC(car2, N2, Q2, R2, QN2, StateConstraints2, InputConstraints2, ay_max2)
+            # 人工势场法被动避障
+            force = [0, 0]
+            for d in range(len(distances)):
+                distance = distances[d]
+                v = calc_v(distance)
+                force[0] += v*orientations[d][0]
+                force[1] += v*orientations[d][1]
 
-    # Compute speed profile
-    a_min1 = -0.1  # m/s^2
-    a_min2 = -0.1  # m/s^2
-    a_max1 = 0.5  # m/s^2
-    a_max2 = 0.5  # m/s^2
-    SpeedProfileConstraints1 = {'a_min': a_min1, 'a_max': a_max1,
-                               'v_min': 0.0, 'v_max': v_max1, 'ay_max': ay_max1}
-    SpeedProfileConstraints2 = {'a_min': a_min2, 'a_max': a_max2,
-                               'v_min': 0.0, 'v_max': v_max2, 'ay_max': ay_max2}
-    car1.reference_path.compute_speed_profile(SpeedProfileConstraints1)
-    car2.reference_path.compute_speed_profile(SpeedProfileConstraints2)
-
-    ##############
-    # Simulation #
-    ##############
-
-    # Set simulation time to zero
-    t = 0.0
-
-    # Logging containers
-    x_log1 = [car1.temporal_state.x]
-    x_log2 = [car2.temporal_state.x]
-    y_log1 = [car1.temporal_state.y]
-    y_log2 = [car2.temporal_state.y]
-    v_log1 = [0.0]
-    v_log2 = [0.0]
-
-    # Until arrival at end of path
-    car1_data = dict()
-    car1_data['state/id'] = [1535178]
-    car1_data['state/current/x'] = []
-    car1_data['state/current/y'] = []
-    car1_data['state/current/length'] = []
-    car1_data['state/current/width'] = []
-    car1_data['state/current/velocity_x'] = []
-    car1_data['state/current/velocity_y'] = []
-    car1_data['state/current/bbox_yaw'] = []
-    car1_data['state/future/x'] = []
-    car1_data['state/future/y'] = []
-    car1_data['state/future/length'] = []
-    car1_data['state/future/width'] = []
-    car1_data['state/future/velocity_x'] = []
-    car1_data['state/future/velocity_y'] = []
-    car1_data['state/future/bbox_yaw'] = []
-    
-    car2_data = dict()
-    car2_data['state/id'] = [1535205]
-    car2_data['state/current/x'] = []
-    car2_data['state/current/y'] = []
-    car2_data['state/current/length'] = []
-    car2_data['state/current/width'] = []
-    car2_data['state/current/velocity_x'] = []
-    car2_data['state/current/velocity_y'] = []
-    car2_data['state/current/bbox_yaw'] = []
-    car2_data['state/future/x'] = []
-    car2_data['state/future/y'] = []
-    car2_data['state/future/length'] = []
-    car2_data['state/future/width'] = []
-    car2_data['state/future/velocity_x'] = []
-    car2_data['state/future/velocity_y'] = []
-    car2_data['state/future/bbox_yaw'] = []
-    
-    while (car1.s < reference_path1.length and car2.s < reference_path2.length):
-        plt.clf()
-        plt.scatter(path1x, path1y, c='green', s=10)
-        plt.scatter(path2x, path2y, c='green', s=10)
-        
-        # Update Costmaps
-        obs1 = [Obstacle(cx=car2.temporal_state.x, cy=car2.temporal_state.y, radius=0.1)]
-        obs2 = [Obstacle(cx=car1.temporal_state.x, cy=car1.temporal_state.y, radius=0.1)]
-        map1.add_obstacles(obs1)
-        map2.add_obstacles(obs2)
-        car1.reference_path.map = map1
-        car2.reference_path.map = map2
-        
-        distance = math.sqrt((car1.temporal_state.x - car2.temporal_state.x)**2 + (car1.temporal_state.y - car2.temporal_state.y)**2)
-        
-        # Get control signals
-        u1 = mpc1.get_control()
-        u2 = mpc2.get_control()
-        #if(distance>=10):
-        #    u2 = mpc2.get_control()
-
-        # Simulate car
-        car1.drive(u1)
-        car2.drive(u2)
-        #if(distance>=10):
-        #    car2.drive(u2)
-
-        # Log car state
-        x_log1.append(car1.temporal_state.x)
-        x_log2.append(car2.temporal_state.x)
-        y_log1.append(car1.temporal_state.y)
-        y_log2.append(car2.temporal_state.y)
-        v_log1.append(u1[0])
-        v_log2.append(u2[0])
-
-        # Increment simulation time
-        t += (car1.Ts + car2.Ts)/2
-
-        # Plot path and drivable area
-        reference_path1.show()
-        reference_path2.show()
-
-        # Plot car
-        car1.show()
-        car2.show()
-
-        # Plot MPC prediction
-        mpc1.show_prediction()
-        mpc2.show_prediction()
-        
-        map1.clear_obstacles(obs1)
-        map2.clear_obstacles(obs2)
-        
-        # Store data
-        car1_data['state/current/x'].append(car1.temporal_state.x)
-        car2_data['state/current/x'].append(car2.temporal_state.x)
-        car1_data['state/current/length'].append(3)
-        car2_data['state/current/length'].append(3)
-        car1_data['state/current/width'].append(2)
-        car2_data['state/current/width'].append(2)
-        car1_data['state/current/y'].append(car1.temporal_state.y)
-        car2_data['state/current/y'].append(car2.temporal_state.y)
-        car1_data['state/current/velocity_x'].append(u1[0]*math.cos(car1.temporal_state.psi))
-        car2_data['state/current/velocity_x'].append(u2[0]*math.cos(car2.temporal_state.psi))
-        car1_data['state/current/velocity_y'].append(u1[0]*math.sin(car1.temporal_state.psi))
-        car2_data['state/current/velocity_y'].append(u2[0]*math.sin(car2.temporal_state.psi))
-        car1_data['state/future/x'].append(mpc1.current_prediction[0])
-        car2_data['state/future/x'].append(mpc2.current_prediction[0])
-        car1_data['state/future/y'].append(mpc1.current_prediction[1])
-        car2_data['state/future/y'].append(mpc2.current_prediction[1])
-        car1_data['state/current/bbox_yaw'].append(car1.temporal_state.psi)
-        car2_data['state/current/bbox_yaw'].append(car2.temporal_state.psi)
-        
-        
-        
-        
-        car1_future_yaw = calc_yaw(mpc1.current_prediction[0], mpc1.current_prediction[1])
-        car2_future_yaw = calc_yaw(mpc2.current_prediction[0], mpc2.current_prediction[1])
-        car1_data['state/future/bbox_yaw'].append(car1_future_yaw)
-        car2_data['state/future/bbox_yaw'].append(car2_future_yaw)
-    
-    
-    
-    
-        car1_future_vel_x = []
-        for i in range(len(mpc1.current_prediction[0])):
-            if(i==0):
-                pass
+            # 如果周围没有其他车辆
+            if(force[0] == 0 and force[1] == 0):
+                # 通过mpc求解控制量
+                u = mpc.get_control()
+            # 如果周围有其他车辆
             else:
-                current_x = mpc1.current_prediction[0][i]
-                last_x = mpc1.current_prediction[0][i]
-                car1_future_vel_x.append((current_x-last_x)/car1.Ts)
-        car1_future_vel_x.append(car1_future_vel_x[-1])
-        car1_data['state/future/velocity_x'].append(car1_future_vel_x)
+                # 更新mpc类内部状态
+                mpc.model.get_current_waypoint()
+                mpc.model.spatial_state = mpc.model.t2s(reference_state=
+                    mpc.model.temporal_state, reference_waypoint=
+                    mpc.model.current_waypoint)
+                # 通过人工势场法进行被动避障
+                vx = -force[0]
+                vy = -force[1]
+                v = math.sqrt(vx**2 + vy**2)
+                psi = math.acos(vx/v)
+                if(psi<=0):
+                    psi = psi+2*math.pi
+                delta_psi = psi - car.temporal_state.psi
+                u = np.array([v*math.cos(delta_psi), delta_psi/car.Ts])
 
-        car2_future_vel_x = []
-        for i in range(len(mpc2.current_prediction[0])):
-            if(i==0):
-                pass
-            else:
-                current_x = mpc2.current_prediction[0][i]
-                last_x = mpc2.current_prediction[0][i]
-                car2_future_vel_x.append((current_x-last_x)/car2.Ts)
-        car2_future_vel_x.append(car2_future_vel_x[-1])
-        car2_data['state/future/velocity_x'].append(car2_future_vel_x)
-        
-        car1_future_vel_y = []
-        for i in range(len(mpc1.current_prediction[1])):
-            if(i==0):
-                pass
-            else:
-                current_y = mpc1.current_prediction[1][i]
-                last_y = mpc1.current_prediction[1][i]
-                car1_future_vel_y.append((current_y-last_y)/car1.Ts)
-        car1_future_vel_y.append(car1_future_vel_y[-1])
-        car1_data['state/future/velocity_y'].append(car1_future_vel_y)
-        
-        car2_future_vel_y = []
-        for i in range(len(mpc2.current_prediction[1])):
-            if(i==0):
-                pass
-            else:
-                current_y = mpc2.current_prediction[1][i]
-                last_y = mpc2.current_prediction[1][i]
-                car2_future_vel_y.append((current_y-last_y)/car2.Ts)
-        car2_future_vel_y.append(car2_future_vel_y[-1])
-        car2_data['state/future/velocity_y'].append(car2_future_vel_y)
-        
-        
-        
-        
-        # Set figure title
-        plt.title('MPC Simulation: v(t): {:.2f}, delta(t): {:.2f}, Duration: '
-                  '{:.2f} s'.format(u1[0], u1[1], t))
-        plt.axis('off')
-        plt.pause(0.00001)
-    
-    
-    
-    
-    with codecs.open('car1_mpc_output.json','a', 'utf-8') as outf:
-        json.dump(car1_data, outf, ensure_ascii=False)
-        outf.write('\n')
-        
-    with codecs.open('car2_mpc_output.json','a', 'utf-8') as outf:
-        json.dump(car2_data, outf, ensure_ascii=False)
-        outf.write('\n')
+            # 汽车运动
+            car.drive(u)
+            # 记时
+            t += car.Ts
+            index += 1
+
+            # 可视化路径
+            reference_path.show()
+            # 可视化汽车
+            car.show()
+            # 可视化mpc预测结果
+            mpc.show_prediction()
+
+            # 清除障碍物
+            map_data.clear_obstacles(obs_to_map)
+
+            plt.title('MPC Simulation: v(t): {:.2f}, delta(t): {:.2f}, Duration: '
+                  '{:.2f} s'.format(u[0], u[1], t))
+            plt.pause(0.00001)
+
+        # 整合记录轨迹
+        xy_cache = [x_cache, y_cache]
+        obs_cache.append(xy_cache)

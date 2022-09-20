@@ -249,7 +249,7 @@ class SpatialBicycleModel(ABC):
         """
 
         # Model ellipsoid around the car
-        safety_margin = 5*self.width# / np.sqrt(2)
+        safety_margin = self.width / np.sqrt(2)
 
         return safety_margin
 
