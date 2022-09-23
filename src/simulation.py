@@ -17,9 +17,9 @@ import pathlib
 from CubicSpline import cubic_spline_planner
 
 def calc_v(distance):
-    obstacle_distance_range = 7.5 #meter
+    obstacle_distance_range = 10 #meter
     if(distance<=obstacle_distance_range):
-        return (obstacle_distance_range - 0.6*distance)
+        return 0.6*(obstacle_distance_range - distance)
     else:
         return 0
 
@@ -83,10 +83,7 @@ def run_mpc(data_path):
 
         state_future_x = []
         state_future_y = []
-        state_future_z = []
         state_future_bbox_yaw = []
-        state_future_length = []
-        state_future_width = []
         state_future_vel_yaw = []
         state_future_velocity_x = []
         state_future_velocity_y = []
@@ -131,17 +128,16 @@ def run_mpc(data_path):
             # 根据路径、地图数据，构建汽车模型
             try:
                 car = BicycleModel(length=average_length, width=average_width,
-                            reference_path=reference_path, Ts=0.5)
+                            reference_path=reference_path, Ts=0.2)
             except:
                 #print("不出意外轨迹是一堆离散的点")
                 plt.clf()
                 plt.scatter(wp_x, wp_y)
-                plt.title("这个轨迹无法喂给mpc")
                 plt.pause(0.5)
                 flag = 0
 
             # 创建MPC求解器
-            N = 80
+            N = 20
             Q = sparse.diags([1.0, 1.0, 1.0])
             R = sparse.diags([0.5, 0.5])
             QN = sparse.diags([1.0, 1.0, 1.0])
@@ -264,8 +260,12 @@ def run_mpc(data_path):
                     #    mpc.model.current_waypoint)
                     
                     # 通过人工势场法进行被动避障
-                    vx = -force[0]
-                    vy = -force[1]
+                    pf_vx = -force[0]
+                    pf_vy = -force[1]
+                    mpc_vx = u[0]*math.cos(car.temporal_state.psi)
+                    mpc_vy = u[0]*math.sin(car.temporal_state.psi)
+                    vx = pf_vx + mpc_vx
+                    vy = pf_vy + mpc_vy
                     v = math.sqrt(vx**2 + vy**2)
                     psi = np.arctan2(vy, vx)
                     plt.plot([car.temporal_state.x, car.temporal_state.x+vx], [car.temporal_state.y, car.temporal_state.y+vy],c='g')
@@ -279,8 +279,8 @@ def run_mpc(data_path):
                         wz = delta_max
                     elif(wz<=-delta_max):
                         wz = -delta_max
-                    u0 = v*math.cos(delta_psi)+u[0]/4
-                    u1 = wz+u[1]/4
+                    u0 = v*math.cos(delta_psi)
+                    u1 = wz
                     if(u0<0):
                         u1 = -u1
                     u = np.array([u0, u1])
