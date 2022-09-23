@@ -207,16 +207,16 @@ class MPC:
 
         except:
 
-            print('Infeasible problem. Previously predicted'
-                  ' control signal used!')
+            #print('Infeasible problem. Previously predicted'
+            #      ' control signal used!')
             id = nu * (self.infeasibility_counter + 1)
             u = np.array(self.current_control[id:id+2])
 
             # increase infeasibility counter
             self.infeasibility_counter += 1
 
-        if self.infeasibility_counter == (self.N - 1):
-            print('No control signal computed!')
+        if self.infeasibility_counter == 2:#(self.N - 1):
+            #print('No control signal computed!')
             exit(1)
 
         return u
@@ -255,4 +255,3 @@ class MPC:
         if self.current_prediction is not None:
             plt.scatter(self.current_prediction[0], self.current_prediction[1],
                     c=PREDICTION, s=30)
-

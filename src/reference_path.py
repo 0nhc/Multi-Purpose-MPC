@@ -365,7 +365,7 @@ class ReferencePath:
             wp_id = np.mod(wp_id, self.n_waypoints)
         # Terminate execution if end of path reached
         elif wp_id >= self.n_waypoints and not self.circular:
-            print('Reached end of path!')
+            #print('Reached end of path!')
             return self.waypoints[-1]
             #exit(1)
 
@@ -380,11 +380,11 @@ class ReferencePath:
 
         # Clear figure
         #plt.clf()
-
+        '''
         # Disabled ticks
         plt.xticks([])
         plt.yticks([])
-        
+        '''
         # Plot map in gray-scale and set extent to match world coordinates
         canvas = np.ones(self.map.data.shape)
         # canvas = np.flipud(self.map.data)
@@ -411,7 +411,7 @@ class ReferencePath:
         plt.scatter(wp_x, wp_y, c=WAYPOINTS, s=10)
         
         # Plot arrows indicating drivable area
-        
+        '''
         if display_drivable_area:
             plt.quiver(wp_x, wp_y, wp_ub_x - wp_x, wp_ub_y - wp_y, scale=1,
                    units='xy', width=0.2*self.resolution, color=DRIVABLE_AREA,
@@ -419,7 +419,7 @@ class ReferencePath:
             plt.quiver(wp_x, wp_y, wp_lb_x - wp_x, wp_lb_y - wp_y, scale=1,
                    units='xy', width=0.2*self.resolution, color=DRIVABLE_AREA,
                    headwidth=1, headlength=0)
-        
+        '''
         # Plot border of path
 
         bl_x = np.array([wp.static_border_cells[0][0] for wp in
@@ -436,7 +436,7 @@ class ReferencePath:
                         [self.waypoints[0].static_border_cells[1][1]])
 
         # If circular path, connect start and end point
-        
+        '''
         if self.circular:
             plt.plot(bl_x, bl_y, color='#5E5E5E')
             plt.plot(br_x, br_y, color='#5E5E5E')
@@ -446,7 +446,7 @@ class ReferencePath:
             plt.plot(br_x[:-1], br_y[:-1], color=OBSTACLE)
             plt.plot((bl_x[-2], br_x[-2]), (bl_y[-2], br_y[-2]), color=OBSTACLE)
             plt.plot((bl_x[0], br_x[0]), (bl_y[0], br_y[0]), color=OBSTACLE)
-        
+        '''
         # Plot dynamic path constraints
         # Get x and y locations of border cells for upper and lower bound
         wp_ub_x = np.array(
@@ -461,10 +461,10 @@ class ReferencePath:
         wp_lb_y = np.array(
             [wp.dynamic_border_cells[1][1] for wp in self.waypoints]+
                         [self.waypoints[0].static_border_cells[1][1]])
-        
+        '''
         plt.plot(wp_ub_x, wp_ub_y, c=PATH_CONSTRAINTS)
         plt.plot(wp_lb_x, wp_lb_y, c=PATH_CONSTRAINTS)
-        
+        '''
         
         
         # Plot obstacles

@@ -87,6 +87,7 @@ class CubicSpline1D:
             return None
 
         i = self.__search_index(x)
+        #print('i: '+str(i))
         dx = x - self.x[i]
         position = self.a[i] + self.b[i] * dx + \
             self.c[i] * dx ** 2.0 + self.d[i] * dx ** 3.0
@@ -238,7 +239,7 @@ class CubicSpline2D:
     def __calc_s(self, x, y):
         dx = np.diff(x)
         dy = np.diff(y)
-        self.ds = np.hypot(dx, dy)
+        self.ds = np.hypot(dx, dy) # return math.sqrt(x**2 + y**2)
         s = [0]
         s.extend(np.cumsum(self.ds))
         return s
@@ -311,6 +312,20 @@ class CubicSpline2D:
 def calc_spline_course(x, y, ds=0.1):
     sp = CubicSpline2D(x, y)
     s = list(np.arange(0, sp.s[-1], ds))
+
+    rx, ry, ryaw, rk = [], [], [], []
+    for i_s in s:
+        ix, iy = sp.calc_position(i_s)
+        rx.append(ix)
+        ry.append(iy)
+        ryaw.append(sp.calc_yaw(i_s))
+        rk.append(sp.calc_curvature(i_s))
+
+    return rx, ry, ryaw, rk, s
+
+def calc_spline_course_by_num_points(x, y, num_points = 100):
+    sp = CubicSpline2D(x, y)
+    s = list(np.linspace(0, sp.s[-1], num=num_points))
 
     rx, ry, ryaw, rk = [], [], [], []
     for i_s in s:
